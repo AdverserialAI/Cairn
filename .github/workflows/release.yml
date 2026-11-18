@@ -90,7 +90,10 @@ jobs:
           file: ./container/Dockerfile
           platforms: linux/amd64
           push: true
-          sbom: true
+          # The Kali-derived worker dependency graph exceeds GitHub's 80 MiB
+          # OCI attestation limit. Provenance and the keyless image signature
+          # remain attached; the smaller application image still carries its SBOM.
+          sbom: false
           provenance: mode=max
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
