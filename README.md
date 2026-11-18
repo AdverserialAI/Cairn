@@ -27,6 +27,11 @@ Cairn is a general-purpose problem-solving engine. <br/>It defines no roles, no 
 
 </div>
 
+> This is the AdverserialAI fork of [oritera/Cairn](https://github.com/oritera/Cairn).
+> It keeps the upstream AGPL-3.0 license, provides an English-only codebase and
+> documentation set, and adds confidential model provisioning plus signed,
+> digest-pinned releases for confidential VM deployment.
+
 <p align="center">
   <a href="https://www.bilibili.com/video/BV1a8R5BhEVi/" target="_blank" rel="noopener noreferrer">
     <img src="./README/cairn.png" alt="Cairn runtime screenshot" width="900" />
@@ -174,6 +179,27 @@ uv run --project cairn cairn dispatch --config dispatch.yaml
 # Run startup health checks only
 uv run --project cairn cairn dispatch --config dispatch.yaml --startup-healthcheck-only
 ```
+
+### Confidential VM mode
+
+Hosted deployments can keep external model API keys outside Cairn. The runtime points
+`CAIRN_LLM_BOOTSTRAP_FILE` at a protected JSON document under
+`/run/adverserial/current`; Cairn then sends each worker through the fixed
+`http://model-proxy:8089` origin using only a short-lived local capability token.
+Provider credentials and endpoints present in `dispatch.yaml` are removed before the
+managed values are applied, and an invalid or incomplete bootstrap stops startup.
+
+Start from the managed example:
+
+```bash
+cp dispatch.confidential.example.yaml dispatch.yaml
+export CAIRN_LLM_BOOTSTRAP_FILE=/run/adverserial/current/cairn-llm.json
+uv run --project cairn cairn dispatch --config dispatch.yaml
+```
+
+See [Confidential model access](docs/CONFIDENTIAL-MODEL-ACCESS.md) for the document
+schema and file permission requirements. Each tagged release publishes signed Cairn
+and worker image digests; see [Releasing Cairn](docs/RELEASING.md).
 
 ### Local mode (no Docker)
 
