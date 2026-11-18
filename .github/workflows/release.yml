@@ -1,0 +1,148 @@
+# Build, attest, sign, and publish the Cairn application and worker images.
+# Only a semantic version tag on main can trigger this workflow. Google Cloud and
+# Sigstore authentication use short-lived GitHub OIDC identities; no publishing key
+# is stored in the repository.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  APP_IMAGE: us-central1-docker.pkg.dev/adverserial-ack-poc/agents/cairn
+  WORKER_IMAGE: us-central1-docker.pkg.dev/adverserial-ack-poc/agents/cairn-worker
+  WORKLOAD_IDENTITY_PROVIDER: projects/711745269151/locations/global/workloadIdentityPools/github-releases/providers/cairn
+  PUBLISHER: artex-release-publisher@adverserial-ack-poc.iam.gserviceaccount.com
+
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Refuse a tag that is not on main
+        run: |
+          git rev-parse --verify --quiet origin/main >/dev/null
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::$GITHUB_REF_NAME points at a commit that is not on main"; exit 1; }
+          test -z "$(git status --porcelain)"
+
+      - name: Validate the version tag
+        run: '[[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'
+
+      - name: Sign in to Google Cloud without a stored secret
+        id: google
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.PUBLISHER }}
+          token_format: access_token
+          access_token_lifetime: 1800s
+
+      - name: Sign in to Artifact Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.google.outputs.access_token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build and push the Cairn application
+        id: app
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          sbom: true
+          provenance: mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          tags: |
+            ${{ env.APP_IMAGE }}:${{ github.ref_name }}
+            ${{ env.APP_IMAGE }}:git-${{ github.sha }}
+
+      - name: Build and push the Cairn worker
+        id: worker
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ./container
+          file: ./container/Dockerfile
+          platforms: linux/amd64
+          push: true
+          sbom: true
+          provenance: mode=max
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          tags: |
+            ${{ env.WORKER_IMAGE }}:${{ github.ref_name }}
+            ${{ env.WORKER_IMAGE }}:git-${{ github.sha }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign both images by digest
+        env:
+          APP_DIGEST: ${{ steps.app.outputs.digest }}
+          WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
+        run: |
+          [[ "$APP_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$WORKER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          cosign sign --yes "$APP_IMAGE@$APP_DIGEST"
+          cosign sign --yes "$WORKER_IMAGE@$WORKER_DIGEST"
+
+      - name: Publish the release and measurement pins
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_DIGEST: ${{ steps.app.outputs.digest }}
+          WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
+        run: |
+          cat > notes.md <<NOTES
+          ## Confidential VM image pins
+
+          | Component | Digest-pinned image |
+          | --- | --- |
+          | Cairn application | `$APP_IMAGE@$APP_DIGEST` |
+          | Cairn worker | `$WORKER_IMAGE@$WORKER_DIGEST` |
+
+          Commit: `$GITHUB_SHA`
+
+          ## Verify the signatures
+
+          ```bash
+          cosign verify "$APP_IMAGE@$APP_DIGEST" \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+            --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+
+          cosign verify "$WORKER_IMAGE@$WORKER_DIGEST" \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+            --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+          ```
+
+          Use these immutable digests in the deployment repository and in the
+          confidential VM configuration that is included in the measured launch state.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "Cairn $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
