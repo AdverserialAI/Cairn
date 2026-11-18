@@ -161,18 +161,18 @@ jobs:
 
           | Component | Digest-pinned image |
           | --- | --- |
-          | Cairn application | `$APP_IMAGE@$APP_DIGEST` |
-          | Cairn worker | `$WORKER_IMAGE@$WORKER_DIGEST` |
+          | Cairn application | \`$APP_IMAGE@$APP_DIGEST\` |
+          | Cairn worker | \`$WORKER_IMAGE@$WORKER_DIGEST\` |
 
-          Commit: `$GITHUB_SHA`
+          Commit: \`$GITHUB_SHA\`
 
-          The attached `cairn-release.json` and `cairn-images.env` record both
-          measurement inputs. `SHA256SUMS` authenticates those downloaded files after
+          The attached \`cairn-release.json\` and \`cairn-images.env\` record both
+          measurement inputs. \`SHA256SUMS\` authenticates those downloaded files after
           the workflow identity and image signatures are checked.
 
           ## Verify the signatures
 
-          ```bash
+          \`\`\`bash
           cosign verify "$APP_IMAGE@$APP_DIGEST" \\
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
             --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
@@ -180,7 +180,7 @@ jobs:
           cosign verify "$WORKER_IMAGE@$WORKER_DIGEST" \\
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
             --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
-          ```
+          \`\`\`
 
           Use these immutable digests in the deployment repository and in the
           confidential VM configuration that is included in the measured launch state.
