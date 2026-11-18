@@ -13,7 +13,9 @@ The release workflow verifies that the tagged commit belongs to `main`, builds t
 Cairn application and worker images for Linux AMD64, attaches SBOM and provenance
 attestations, pushes both images to Artifact Registry, and signs each digest with a
 keyless Sigstore identity tied to this repository, workflow, and tag. The resulting
-GitHub release lists both immutable image references and verification commands.
+GitHub release lists both immutable image references and verification commands. It
+also attaches `cairn-release.json`, `cairn-images.env`, and `SHA256SUMS` so the two
+exact image references can be consumed as confidential-runtime measurement inputs.
 
 No registry password, cloud service-account key, or signing key is stored in GitHub.
 The workflow exchanges GitHub's short-lived OIDC token through the repository-scoped
