@@ -113,6 +113,40 @@ jobs:
           cosign sign --yes "$APP_IMAGE@$APP_DIGEST"
           cosign sign --yes "$WORKER_IMAGE@$WORKER_DIGEST"
 
+      - name: Create confidential-runtime release files
+        env:
+          APP_DIGEST: ${{ steps.app.outputs.digest }}
+          WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          app = f'{os.environ["APP_IMAGE"]}@{os.environ["APP_DIGEST"]}'
+          worker = f'{os.environ["WORKER_IMAGE"]}@{os.environ["WORKER_DIGEST"]}'
+          for image in (app, worker):
+              if "@sha256:" not in image or len(image.rsplit("@sha256:", 1)[1]) != 64:
+                  raise SystemExit("invalid release digest")
+          identity = f'https://github.com/{os.environ["GITHUB_REPOSITORY"]}/.github/workflows/release.yml@{os.environ["GITHUB_REF"]}'
+          manifest = {
+              "schema": "adverserial.agent-release/v1",
+              "product": "Cairn",
+              "version": os.environ["GITHUB_REF_NAME"],
+              "commit": os.environ["GITHUB_SHA"],
+              "platform": "linux/amd64",
+              "images": {"application": app, "worker": worker},
+              "attestation": {
+                  "cosign_oidc_issuer": "https://token.actions.githubusercontent.com",
+                  "cosign_certificate_identity": identity,
+                  "measurement_input": "both image digests",
+              },
+          }
+          Path("cairn-release.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+          Path("cairn-images.env").write_text(f"CAIRN_IMAGE={app}\nCAIRN_WORKER_IMAGE={worker}\n")
+          PY
+          sha256sum cairn-release.json cairn-images.env > SHA256SUMS
+
       - name: Publish the release and measurement pins
         env:
           GH_TOKEN: ${{ github.token }}
@@ -128,6 +162,10 @@ jobs:
           | Cairn worker | `$WORKER_IMAGE@$WORKER_DIGEST` |
 
           Commit: `$GITHUB_SHA`
+
+          The attached `cairn-release.json` and `cairn-images.env` record both
+          measurement inputs. `SHA256SUMS` authenticates those downloaded files after
+          the workflow identity and image signatures are checked.
 
           ## Verify the signatures
 
@@ -145,4 +183,5 @@ jobs:
           confidential VM configuration that is included in the measured launch state.
           NOTES
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --title "Cairn $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+            --title "Cairn $GITHUB_REF_NAME" --notes-file notes.md --verify-tag \
+            cairn-release.json cairn-images.env SHA256SUMS
