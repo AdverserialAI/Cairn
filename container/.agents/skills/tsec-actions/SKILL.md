@@ -1,12 +1,12 @@
 ---
 name: tsec-actions
-description: Submit a flag for a TSEC CTF or authorized intelligent penetration-testing challenge.
+description: Use when submitting a flag for a challenge in the tsec CTF / intelligent penetration testing competition
 ---
 
 ## Usage
 
-* Call the API directly with `curl`. `TSEC_SERVER_HOST` and `TSEC_AGENT_TOKEN` are already available as environment variables.
-* Flags use the `flag{...}` format.
+* Call the API directly with `curl`; TSEC_SERVER_HOST and TSEC_AGENT_TOKEN are already present in the environment variables
+* Flags always use the `flag{...}` format
 
 Submit a flag:
 
@@ -19,5 +19,5 @@ curl -X POST "http://${TSEC_SERVER_HOST}/api/submit" \
 
 ## Rules
 
-- Submit a flag only with high confidence. Do not use the endpoint for brute forcing.
-- Treat the API response as the authoritative result; do not assume that a submission succeeded.
+- Only submit a flag when you have high confidence; do not treat this as a brute-force endpoint
+- Treat the API response as authoritative for flag submission; never assume a submission succeeded on your own
