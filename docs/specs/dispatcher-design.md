@@ -165,7 +165,6 @@ In other words:
 - Users only need to provide `dispatch.yaml`
 - Task prompts are distributed with the code as markdown files, selected via `runtime.prompt_group`
 - Worker health checks, command templates, session handling, and second-phase wrap-up capability are implemented by the corresponding driver
-- `runtime.execution` selects the execution backend: `container` (default, one container per project) or `local` (workers run as child processes directly on the dispatcher host, reusing the host's already-configured CLIs — no Docker and no API keys required)
 
 The code directory can be organized like this:
 
@@ -875,12 +874,9 @@ When a task is actually dispatched, runtime validation is also required:
 | `runtime.interval` | Yes | Unified cadence config; both the Dispatcher main loop interval and the heartbeat interval of claim-carrying tasks |
 | `runtime.healthcheck_timeout` | Yes | Unified outer watchdog timeout for Worker health checks |
 | `runtime.worker_healthcheck` | No | Worker health check mode: `startup_and_task`, `startup_only`, or `disabled`; default `startup_only` |
-| `runtime.execution` | No | Execution backend: `container` (default) or `local`; with `local`, workers run as child processes on the dispatcher host, reusing the host CLIs; startup validates that each CLI is installed and runnable |
 | `runtime.prompt_group` | Yes | Directory name of the prompt group currently in use |
 
 ### `container.*`
-
-Required only when `runtime.execution: container` (the default).
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -897,15 +893,6 @@ Implementation conventions:
 
 - Container cleanup for completed projects can run asynchronously in parallel and is not required to block the main scheduling loop
 - If a project has been deleted from the Server, the Dispatcher treats `cairn-dispatch-*` containers that no longer map to a project as orphans and stop-cleans them
-
-### `local.*`
-
-Only takes effect when `runtime.execution: local`; ignored in `container` mode. In this mode `container.*` is not needed, and workers do not need any LLM environment variables; at startup the Dispatcher probes each configured worker's CLI with `--help`, and exits with an error if all of them are missing.
-
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `local.workspace_root` | No | Root of the per-project working directories; if unset, the dispatcher's current directory at startup is used, and each project gets an isolated subdirectory `<root>/<project_id>/` as the worker process's working directory |
-| `local.completed_action` | No | How to handle the working directory after the project completes: `keep` (default, preserve the scene) or `remove` |
 
 ### `tasks.*`
 

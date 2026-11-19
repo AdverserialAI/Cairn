@@ -55,8 +55,6 @@ def communicate_timeout(timeout_seconds: int, grace_seconds: int = PROCESS_COMMU
 
 
 def task_healthcheck_enabled(config: DispatchConfig) -> bool:
-    if config.runtime.execution == "local":
-        return False
     return config.runtime.worker_healthcheck == "startup_and_task"
 
 
@@ -100,7 +98,9 @@ def run_healthcheck(
         cancellation.attach_process(process)
     started = time.perf_counter()
     try:
-        result = process.communicate(timeout=communicate_timeout(timeout_seconds, HEALTHCHECK_COMMUNICATE_GRACE_SECONDS))
+        result = process.communicate(
+            timeout=communicate_timeout(timeout_seconds, HEALTHCHECK_COMMUNICATE_GRACE_SECONDS)
+        )
     finally:
         if lease is not None:
             lease.attach_process(None)

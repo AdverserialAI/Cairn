@@ -8,12 +8,6 @@ from cairn.dispatcher.workers.base import DriverResult, RegexSessionDriver
 class CodexDriver(RegexSessionDriver):
     type_name = "codex"
 
-    def __init__(self, local: bool = False):
-        self.local = local
-
-    def local_binary(self) -> str | None:
-        return "codex"
-
     def build_healthcheck(self, worker: WorkerConfig) -> list[str]:
         return [
             "curl",
@@ -47,16 +41,6 @@ class CodexDriver(RegexSessionDriver):
         )
 
     def build_execute(self, worker: WorkerConfig, prompt: str, session: str | None) -> DriverResult:
-        if self.local:
-            return DriverResult(
-                argv=[
-                    "codex",
-                    "exec",
-                    "--dangerously-bypass-approvals-and-sandbox",
-                    "--",
-                    prompt,
-                ]
-            )
         env = worker.env
         return DriverResult(
             argv=[
@@ -83,16 +67,6 @@ class CodexDriver(RegexSessionDriver):
         )
 
     def build_conclude(self, worker: WorkerConfig, prompt: str, session: str) -> list[str]:
-        if self.local:
-            return [
-                "codex",
-                "exec",
-                "resume",
-                session,
-                "--dangerously-bypass-approvals-and-sandbox",
-                "--",
-                prompt,
-            ]
         env = worker.env
         return [
             "codex",
@@ -133,9 +107,4 @@ class CodexDriver(RegexSessionDriver):
 
     @staticmethod
     def _healthcheck_payload(worker: WorkerConfig) -> str:
-        return (
-            '{"input":[{"content":"ping","role":"user"}],'
-            '"model":"'
-            + worker.env["CODEX_MODEL"]
-            + '","stream":false}'
-        )
+        return '{"input":[{"content":"ping","role":"user"}],"model":"' + worker.env["CODEX_MODEL"] + '","stream":false}'
