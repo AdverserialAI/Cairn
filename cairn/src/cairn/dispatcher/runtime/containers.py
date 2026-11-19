@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import io
 import logging
-from pathlib import PurePosixPath
 import tarfile
 import threading
+from pathlib import PurePosixPath
 
 import docker
 from docker.errors import APIError, DockerException, NotFound
@@ -155,7 +155,11 @@ class ContainerManager:
         except DockerException as exc:
             LOG.warning("failed to list managed containers error=%s", exc)
             return []
-        return sorted(container.name for container in containers if container.name.startswith(self._PREFIX))
+        return sorted(
+            container.name
+            for container in containers
+            if container.name is not None and container.name.startswith(self._PREFIX)
+        )
 
     def needs_completed_cleanup(self, project_id: str) -> bool:
         name = self.container_name(project_id)

@@ -14,6 +14,7 @@
 #   environments you are authorized to operate in.
 
 server: "http://127.0.0.1:8000"
+server_token: "change-me-to-a-secure-token"
 
 runtime:
   execution: local            # run workers as host processes instead of per-project containers
