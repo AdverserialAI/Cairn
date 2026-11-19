@@ -1,0 +1,78 @@
+name: "Bug Report"
+description: "Report a bug or unexpected behavior"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting! Please fill in the sections below.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: "Component"
+      description: "Which part of Cairn is affected?"
+      options:
+        - "Server (API / Web UI)"
+        - "Dispatcher (Scheduler / Tasks)"
+        - "Worker (Claude Code / Codex / Pi)"
+        - "Container / Docker"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description"
+      description: "A clear description of the bug."
+      placeholder: |
+        What happened? What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to Reproduce"
+      description: "Minimal steps to reproduce the issue."
+      placeholder: |
+        1. Run `uv run cairn dispatch --config dispatch.yaml`
+        2. Create a project with origin "..." and goal "..."
+        3. Observe error in dispatcher logs
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Logs / Error Output"
+      description: "Paste relevant logs or error messages."
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: "Environment"
+      description: "Please provide your environment details."
+      value: |
+        - OS:
+        - Python version:
+        - Cairn version:
+        - Deploy method: [Docker Compose / Manual]
+        - Worker backend: [Claude Code / Codex / Pi]
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: "Configuration (optional)"
+      description: "Relevant parts of dispatch.yaml (redact API keys)."
+      render: yaml
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: "Additional Context (optional)"
+      description: "Screenshots, related issues, or anything else."

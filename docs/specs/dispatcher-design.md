@@ -165,7 +165,6 @@ In other words:
 - Users only need to provide `dispatch.yaml`
 - Task prompts are distributed with the code as markdown files, selected via `runtime.prompt_group`
 - Worker health checks, command templates, session handling, and second-phase wrap-up capability are implemented by the corresponding driver
-- `runtime.execution` selects the execution backend: `container` (default, one container per project) or `local` (workers run as child processes directly on the dispatcher host, reusing the host's already-configured CLIs — no Docker and no API keys required)
 
 The code directory can be organized like this:
 
@@ -633,7 +632,7 @@ Each Agent / CLI tool corresponds to a separate driver file in the code and impl
 
 The unified interface should at least cover these capabilities:
 
-- `check_health(worker, *, timeout)`: performs an in-process HTTP probe and returns a `HealthResult`
+- `build_healthcheck(worker)`: build the health check command
 - `prepare_session()`: pre-generate a session id when needed
 - `build_execute(worker, prompt, session)`: build the first-phase execution command
 - `extract_session(session, stderr)`: extract the session id from `stderr` when needed, or keep using the pre-generated session
@@ -654,7 +653,7 @@ Concurrency modeling convention:
 
 ### Health Checks
 
-Health checks are implemented by the driver's `check_health`; the Dispatcher makes the call directly in its own process (using `requests`) instead of running curl inside the container.
+Health checks are implemented by the driver.
 
 The goal is not to verify "the container is alive", but that a specific Worker's LLM configuration is actually usable:
 
@@ -662,19 +661,18 @@ The goal is not to verify "the container is alive", but that a specific Worker's
 - API key valid
 - model callable
 
-Each driver builds the request according to its provider's protocol: `claudecode` calls `{base}/v1/messages`, `codex` calls `{base}/responses`, and `pi` selects `/chat/completions`, `/responses`, or `/v1/messages` based on `PI_PROVIDER_API`. The request carries the `http(s)_proxy` settings from the worker's environment, so it follows the same egress path as the actual worker.
-
 Execution rules:
 
 - Before each Worker process start, run one health check first
 - The `explore_conclude` fallback after `explore` timeout / parse-fail does not repeat the health check; it directly attempts conclude and keeps relying on JSON / schema validation to decide writeback
-- HTTP 2xx is considered healthy
-- Non-2xx / connection failure / timeout (the `requests` timeout is controlled by `runtime.healthcheck_timeout`) is considered unhealthy
+- Exit code `0` is considered healthy
+- Non-`0` / timeout (the Dispatcher's outer watchdog is controlled by `runtime.healthcheck_timeout`) / command cannot start is considered unhealthy
+- The driver's internal HTTP probe no longer sets its own timeout; it is uniformly bounded by the Dispatcher's outer watchdog
 - If it fails this time, the current task is discarded outright and the Worker is placed into a short unselectable window
 - After the window ends, when later rounds select this Worker again, it is checked again
 - The Dispatcher records a local `retry_after` for recently failed Workers and does not dispatch to them before that time
 
-The Dispatcher only checks the HTTP status code and does not parse the response body. In `local` mode it does not call the API at all (the local CLIs carry their own auth); instead, at startup it probes each CLI with `--help`.
+The Dispatcher only looks at the exit code and does not need to understand the response body.
 
 ### CLI Integration Conventions
 
@@ -686,7 +684,7 @@ Depends on environment variables:
 - `ANTHROPIC_BASE_URL`
 - `ANTHROPIC_AUTH_TOKEN`
 
-The health check is equivalent to the following request (implemented as an in-process HTTP call by the Dispatcher, no longer running curl inside the container):
+The health check can be implemented equivalently inside the driver:
 
 ```bash
 curl -sS --fail -o /dev/null \
@@ -723,7 +721,7 @@ Depends on environment variables:
 - `CODEX_BASE_URL`
 - `OPENAI_API_KEY`
 
-The health check is equivalent to the following request (implemented as an in-process HTTP call by the Dispatcher, no longer running curl inside the container):
+The health check can be implemented equivalently inside the driver:
 
 ```bash
 curl -sS --fail -o /dev/null \
@@ -876,12 +874,9 @@ When a task is actually dispatched, runtime validation is also required:
 | `runtime.interval` | Yes | Unified cadence config; both the Dispatcher main loop interval and the heartbeat interval of claim-carrying tasks |
 | `runtime.healthcheck_timeout` | Yes | Unified outer watchdog timeout for Worker health checks |
 | `runtime.worker_healthcheck` | No | Worker health check mode: `startup_and_task`, `startup_only`, or `disabled`; default `startup_only` |
-| `runtime.execution` | No | Execution backend: `container` (default) or `local`; with `local`, workers run as child processes on the dispatcher host, reusing the host CLIs; startup validates that each CLI is installed and runnable |
 | `runtime.prompt_group` | Yes | Directory name of the prompt group currently in use |
 
 ### `container.*`
-
-Required only when `runtime.execution: container` (the default).
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -898,15 +893,6 @@ Implementation conventions:
 
 - Container cleanup for completed projects can run asynchronously in parallel and is not required to block the main scheduling loop
 - If a project has been deleted from the Server, the Dispatcher treats `cairn-dispatch-*` containers that no longer map to a project as orphans and stop-cleans them
-
-### `local.*`
-
-Only takes effect when `runtime.execution: local`; ignored in `container` mode. In this mode `container.*` is not needed, and workers do not need any LLM environment variables; at startup the Dispatcher probes each configured worker's CLI with `--help`, and exits with an error if all of them are missing.
-
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `local.workspace_root` | No | Root of the per-project working directories; if unset, the dispatcher's current directory at startup is used, and each project gets an isolated subdirectory `<root>/<project_id>/` as the worker process's working directory |
-| `local.completed_action` | No | How to handle the working directory after the project completes: `keep` (default, preserve the scene) or `remove` |
 
 ### `tasks.*`
 
