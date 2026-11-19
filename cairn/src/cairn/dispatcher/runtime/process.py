@@ -5,7 +5,7 @@ import threading
 import time
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from docker.errors import APIError, DockerException
 from docker.models.containers import Container
@@ -24,12 +24,32 @@ class ProcessResult:
     cancel_reason: str | None = None
 
 
+@runtime_checkable
+class ExecProcess(Protocol):
+    """A worker process, regardless of whether it runs inside a container or on the host.
+
+    Container mode uses ManagedProcess; local mode uses LocalProcess. Both expose this
+    surface so the task runners, heartbeat lease and cancellation stay backend-agnostic.
+    """
+
+    def start(self) -> None: ...
+
+    def communicate(self, timeout: float | None) -> ProcessResult: ...
+
+    def kill(self) -> None: ...
+
+    def cancel(self, reason: str) -> None: ...
+
+
 class ManagedProcess:
     def __init__(self, container: Container, command: list[str], env: dict[str, str]):
         self.command = command
         self.env = env
         self._container = container
-        self._api = container.client.api  # type: ignore[union-attr]
+        client = container.client
+        if client is None:
+            raise ValueError("container is not attached to a Docker client")
+        self._api = client.api
         self._exec_id: str | None = None
         self._reader: threading.Thread | None = None
         self._stdout: list[str] = []

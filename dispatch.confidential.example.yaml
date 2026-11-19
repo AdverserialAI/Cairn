@@ -1,0 +1,50 @@
+server: "http://cairn-server:8000"
+server_token: "change-me-to-a-secure-token"
+
+common_env:
+  TSEC_SERVER_HOST: "<SERVER_HOST>:8000"
+  TSEC_AGENT_TOKEN: "replace-with-a-cairn-agent-token"
+
+runtime:
+  interval: 3
+  max_workers: 4
+  max_running_projects: 2
+  max_project_workers: 2
+  healthcheck_timeout: 20
+  worker_healthcheck: "startup_only"
+  execution: "container"
+  prompt_group: "default"
+
+tasks:
+  bootstrap:
+    timeout: 300
+    conclude_timeout: 90
+  reason:
+    timeout: 300
+    max_intents: 2
+  explore:
+    timeout: 300
+    conclude_timeout: 90
+
+container:
+  # Replace this tag with the worker image digest published in a Cairn release.
+  image: "us-central1-docker.pkg.dev/adverserial-ack-poc/agents/cairn-worker@sha256:<digest>"
+  network_mode: "host"
+  completed_action: "stop"
+
+workers:
+  # Model, proxy endpoint, and local token are injected from
+  # CAIRN_LLM_BOOTSTRAP_FILE before this configuration is validated.
+  - name: "claude-primary"
+    type: "claudecode"
+    task_types: [bootstrap, reason, explore]
+    max_running: 2
+    priority: 0
+    env: {}
+
+  - name: "codex-primary"
+    type: "codex"
+    task_types: [bootstrap, reason, explore]
+    max_running: 2
+    priority: 1
+    env: {}

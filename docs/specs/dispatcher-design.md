@@ -165,6 +165,7 @@ In other words:
 - Users only need to provide `dispatch.yaml`
 - Task prompts are distributed with the code as markdown files, selected via `runtime.prompt_group`
 - Worker health checks, command templates, session handling, and second-phase wrap-up capability are implemented by the corresponding driver
+- `runtime.execution` selects container execution or local host execution
 
 The code directory can be organized like this:
 
@@ -863,6 +864,7 @@ When a task is actually dispatched, runtime validation is also required:
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `server` | Yes | Base URL of the Cairn Server |
+| `server_token` | No | API key sent to the Cairn Server as `X-API-Key`; required when the server configures `CAIRN_API_KEYS` |
 
 ### `runtime.*`
 
@@ -874,9 +876,12 @@ When a task is actually dispatched, runtime validation is also required:
 | `runtime.interval` | Yes | Unified cadence config; both the Dispatcher main loop interval and the heartbeat interval of claim-carrying tasks |
 | `runtime.healthcheck_timeout` | Yes | Unified outer watchdog timeout for Worker health checks |
 | `runtime.worker_healthcheck` | No | Worker health check mode: `startup_and_task`, `startup_only`, or `disabled`; default `startup_only` |
+| `runtime.execution` | No | Execution backend: `container` (default) or `local`; local mode runs workers as host subprocesses and reuses the host CLI configuration |
 | `runtime.prompt_group` | Yes | Directory name of the prompt group currently in use |
 
 ### `container.*`
+
+Required only when `runtime.execution: container`.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
@@ -893,6 +898,16 @@ Implementation conventions:
 
 - Container cleanup for completed projects can run asynchronously in parallel and is not required to block the main scheduling loop
 - If a project has been deleted from the Server, the Dispatcher treats `cairn-dispatch-*` containers that no longer map to a project as orphans and stop-cleans them
+
+### `local.*`
+
+Used only when `runtime.execution: local`. The Dispatcher runs each worker directly on
+the host, checks that its CLI is available, and does not inject model API keys.
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `local.workspace_root` | No | Root for per-project working directories; defaults to the directory where the Dispatcher starts |
+| `local.completed_action` | No | `keep` (default) preserves completed project directories; `remove` deletes them |
 
 ### `tasks.*`
 

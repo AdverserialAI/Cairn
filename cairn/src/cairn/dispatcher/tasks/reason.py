@@ -12,15 +12,14 @@ from cairn.dispatcher.prompting import (
     render_prompt,
 )
 from cairn.dispatcher.protocol.client import CairnClient
+from cairn.dispatcher.runtime.backend import ExecutionBackend
 from cairn.dispatcher.runtime.cancellation import TaskCancellation
-from cairn.dispatcher.runtime.containers import ContainerManager
 from cairn.dispatcher.runtime.heartbeat import HeartbeatLease
 from cairn.dispatcher.tasks.common import (
     best_effort_release_reason,
     cancel_reason,
     did_timeout,
     preview,
-    run_healthcheck,
     run_worker_process,
     task_healthcheck_enabled,
     write_graph_snapshot_reference,
@@ -34,13 +33,13 @@ LOG = logging.getLogger(__name__)
 def run_reason_task(
     config: DispatchConfig,
     client: CairnClient,
-    container_manager: ContainerManager,
+    container_manager: ExecutionBackend,
     project: ProjectDetail,
     export_yaml: str,
     worker: WorkerConfig,
     cancellation: TaskCancellation,
 ) -> str:
-    driver = get_driver(worker.type)
+    driver = get_driver(worker.type, config.runtime.execution)
     task_started = time.perf_counter()
     healthcheck_timeout = config.runtime.healthcheck_timeout
     lease = HeartbeatLease.for_reason(client, project.project.id, worker.name, config.runtime.interval)
@@ -50,27 +49,18 @@ def run_reason_task(
 
         if task_healthcheck_enabled(config):
             LOG.info(
-                "starting container exec project=%s worker=%s phase=reason_healthcheck timeout=%ss",
+                "checking worker health project=%s worker=%s timeout=%ss",
                 project.project.id,
                 worker.name,
                 healthcheck_timeout,
             )
-            healthcheck = run_healthcheck(
-                container_manager,
-                container_name,
-                worker,
-                driver.build_healthcheck(worker),
-                timeout_seconds=healthcheck_timeout,
-                lease=lease,
-                cancellation=cancellation,
-            )
-            cancelled = cancel_reason(healthcheck.result, cancellation)
-            if cancelled is not None:
+            health = driver.check_health(worker, timeout=healthcheck_timeout)
+            if cancellation.is_cancelled:
                 LOG.info(
                     "reason cancelled during healthcheck project=%s worker=%s reason=%s",
                     project.project.id,
                     worker.name,
-                    cancelled,
+                    cancellation.reason,
                 )
                 return "cancelled"
             if lease.failure is not None:
@@ -81,13 +71,13 @@ def run_reason_task(
                     lease.failure.status_code,
                 )
                 return "failed"
-            if healthcheck.result.returncode != 0:
+            if not health.ok:
                 LOG.warning(
-                    "worker unhealthy project=%s worker=%s healthcheck_ms=%s stderr=%s",
+                    "worker unhealthy project=%s worker=%s status=%s detail=%s",
                     project.project.id,
                     worker.name,
-                    healthcheck.duration_ms,
-                    preview(healthcheck.result.stderr),
+                    health.status,
+                    health.detail,
                 )
                 return "unhealthy"
         open_intents = [
