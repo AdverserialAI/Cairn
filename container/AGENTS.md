@@ -1,31 +1,31 @@
-# 环境介绍
-* 当前环境是用于做 CTF 竞赛的 Kali 容器，各种命令行工具齐全
-* 当前目录是解题工作空间，可以用于保存一些命令执行日志，较大的扫描结果等
+# Environment Overview
+* The current environment is a Kali container for CTF competitions, with a full set of command-line tools installed
+* The current directory is the challenge-solving workspace; use it to save command execution logs, large scan results, and so on
 
-# 题目分布
-* level 1 的题目偏向 SRC 场景，自动化众测与主流漏洞发现，你需要多做探索。必要时可以使用 playwright 无头浏览器（playwright-cli --help 查看使用帮助，非必要不要使用）
-* level 2 的题目偏向典型 CVE、云安全及 AI 基础设施这些软件的漏洞，你需要发挥你在网络安全领域的知识，去直接利用这些漏洞，当然你也可以在这些目录尝试搜索 PoC 和 工具：
+# Challenge Distribution
+* Level 1 challenges lean toward SRC scenarios — automated crowdsourced testing and mainstream vulnerability discovery; you need to explore more. If necessary, you may use the playwright headless browser (see `playwright-cli --help` for usage; do not use it unless necessary)
+* Level 2 challenges lean toward vulnerabilities in typical CVEs, cloud security, and AI infrastructure software; apply your cybersecurity knowledge to exploit these vulnerabilities directly. You can also search for PoCs and tools in these directories:
   * /home/kali/.local/nuclei-templates
   * /home/kali/pocs
   * /home/kali/tools
   * /home/kali/knowledges
-* level 3 的题目模拟多层网络环境，考验多步攻击规划与权限维持
-* level 4 的题目是基础域渗透，模拟企业核心内网环境的推演，你可能用到这些命令：
+* Level 3 challenges simulate multi-layer network environments, testing multi-step attack planning and persistence
+* Level 4 challenges are basic domain penetration, simulating exercises in an enterprise core intranet environment; these commands may be useful:
     * ls /usr/bin/impacket-*
     * chisel-common-binaries
     * proxychains
     * ...
 ## chisel
-chisel 二进制程序在 /usr/share/chisel-common-binaries 下面
+The chisel binaries are located under /usr/share/chisel-common-binaries
 
-# 反弹Shell，数据外带 OOB，多层网络，XSS 数据外发
-* **重要**： 你当前的对外 IP 是 **未填写**
-* 你在当前容器里监听的端口，都可以通过 **未填写** IP 进行访问。 任何反弹 Shell，数据外带，XSS接收平台，SSRF绕过需要搭建的WEB平台，XXE外部实体需要搭建的Web平台，恶意web服务等的操作都使用该 IP
+# Reverse Shells, OOB Data Exfiltration, Multi-Layer Networks, XSS Data Exfiltration
+* **Important**: your current external IP is **NOT FILLED IN**
+* Any port you listen on inside the current container can be reached via the **NOT FILLED IN** IP. Use this IP for every reverse shell, data exfiltration channel, XSS receiving platform, web platform needed for SSRF bypass, web platform needed for XXE external entities, malicious web service, and similar operations
 
-# 其他
-* 该环境是 Kali 容器，安装了所有常见工具，你可以直接尝试这些工具的命令,比如
+# Other
+* This environment is a Kali container with all common tools installed; you can directly try these tools' commands, for example:
     * nuclei
     * ffuf
     * ...
-* 需要持续运行，或者共享给之后阶段的交互式命令，可以在 **tmux** 会话中运行，最后输出结论和总结的时候要说清楚 tmux 会话信息
-    * 比如持续运行的用于接收数据的 HTTP服务，nc 接听反弹的Shell 等
+* Interactive commands that need to keep running, or need to be shared with later stages, can run inside a **tmux** session; when you output your final conclusions and summary, clearly state the tmux session information
+    * For example, a long-running HTTP service for receiving data, nc listening for a reverse shell, and so on
