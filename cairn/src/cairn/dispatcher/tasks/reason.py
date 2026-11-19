@@ -20,6 +20,7 @@ from cairn.dispatcher.tasks.common import (
     cancel_reason,
     did_timeout,
     preview,
+    run_healthcheck,
     run_worker_process,
     task_healthcheck_enabled,
     write_graph_snapshot_reference,
@@ -49,18 +50,27 @@ def run_reason_task(
 
         if task_healthcheck_enabled(config):
             LOG.info(
-                "checking worker health project=%s worker=%s timeout=%ss",
+                "starting container exec project=%s worker=%s phase=reason_healthcheck timeout=%ss",
                 project.project.id,
                 worker.name,
                 healthcheck_timeout,
             )
-            health = driver.check_health(worker, timeout=healthcheck_timeout)
-            if cancellation.is_cancelled:
+            healthcheck = run_healthcheck(
+                container_manager,
+                container_name,
+                worker,
+                driver.build_healthcheck(worker),
+                timeout_seconds=healthcheck_timeout,
+                lease=lease,
+                cancellation=cancellation,
+            )
+            cancelled = cancel_reason(healthcheck.result, cancellation)
+            if cancelled is not None:
                 LOG.info(
                     "reason cancelled during healthcheck project=%s worker=%s reason=%s",
                     project.project.id,
                     worker.name,
-                    cancellation.reason,
+                    cancelled,
                 )
                 return "cancelled"
             if lease.failure is not None:
@@ -71,13 +81,13 @@ def run_reason_task(
                     lease.failure.status_code,
                 )
                 return "failed"
-            if not health.ok:
+            if healthcheck.result.returncode != 0:
                 LOG.warning(
-                    "worker unhealthy project=%s worker=%s status=%s detail=%s",
+                    "worker unhealthy project=%s worker=%s healthcheck_ms=%s stderr=%s",
                     project.project.id,
                     worker.name,
-                    health.status,
-                    health.detail,
+                    healthcheck.duration_ms,
+                    preview(healthcheck.result.stderr),
                 )
                 return "unhealthy"
         open_intents = [

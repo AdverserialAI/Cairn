@@ -16,6 +16,7 @@ from cairn.dispatcher.tasks.common import (
     did_timeout,
     project_allows_conclude_fallback,
     preview,
+    run_healthcheck,
     run_worker_process,
     task_healthcheck_enabled,
     write_conclude_result,
@@ -47,20 +48,29 @@ def run_explore_task(
 
         if task_healthcheck_enabled(config):
             LOG.info(
-                "checking worker health project=%s intent=%s worker=%s timeout=%ss",
+                "starting container exec project=%s intent=%s worker=%s phase=explore_healthcheck timeout=%ss",
                 project.project.id,
                 intent.id,
                 worker.name,
                 healthcheck_timeout,
             )
-            health = driver.check_health(worker, timeout=healthcheck_timeout)
-            if cancellation.is_cancelled:
+            healthcheck = run_healthcheck(
+                container_manager,
+                container_name,
+                worker,
+                driver.build_healthcheck(worker),
+                timeout_seconds=healthcheck_timeout,
+                lease=lease,
+                cancellation=cancellation,
+            )
+            cancelled = cancel_reason(healthcheck.result, cancellation)
+            if cancelled is not None:
                 LOG.info(
                     "explore cancelled during healthcheck project=%s intent=%s worker=%s reason=%s",
                     project.project.id,
                     intent.id,
                     worker.name,
-                    cancellation.reason,
+                    cancelled,
                 )
                 best_effort_release(client, project.project.id, intent.id, worker.name)
                 return "cancelled"
@@ -74,14 +84,14 @@ def run_explore_task(
                 )
                 best_effort_release(client, project.project.id, intent.id, worker.name)
                 return "failed"
-            if not health.ok:
+            if healthcheck.result.returncode != 0:
                 LOG.warning(
-                    "worker unhealthy project=%s intent=%s worker=%s status=%s detail=%s",
+                    "worker unhealthy project=%s intent=%s worker=%s healthcheck_ms=%s stderr=%s",
                     project.project.id,
                     intent.id,
                     worker.name,
-                    health.status,
-                    health.detail,
+                    healthcheck.duration_ms,
+                    preview(healthcheck.result.stderr),
                 )
                 best_effort_release(client, project.project.id, intent.id, worker.name)
                 return "unhealthy"

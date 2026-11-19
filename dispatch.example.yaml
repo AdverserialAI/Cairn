@@ -63,7 +63,7 @@ workers:
     env:
       ANTHROPIC_MODEL: "deepseek-v4-pro"
       ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic"
-      ANTHROPIC_AUTH_TOKEN: "REDACTED_REVOKED_UPSTREAM_CREDENTIAL"
+      ANTHROPIC_AUTH_TOKEN: "sk-xxx"
 
   # - name: "codex_qwen3.6-plus"
   #   type: "codex"
