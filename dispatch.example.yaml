@@ -59,34 +59,34 @@ container:
 workers:
   # Worker priority is ascending: lower numbers are preferred first.
   # max_running is per-worker concurrency. Slower backends such as Pi usually benefit from lower values.
-  - name: "claudecode_deepseek-v4-pro"
+  - name: "claudecode_claude-sonnet"
     type: "claudecode"
     task_types: [bootstrap, reason, explore]
     max_running: 2
     priority: 0
     env:
-      ANTHROPIC_MODEL: "deepseek-v4-pro"
-      ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic"
+      ANTHROPIC_MODEL: "claude-sonnet-4-5"
+      ANTHROPIC_BASE_URL: "https://api.anthropic.com"
       ANTHROPIC_AUTH_TOKEN: "sk-xxx"
 
-  - name: "codex_qwen3.6-plus"
+  - name: "codex_gpt-5"
     type: "codex"
     task_types: [bootstrap,reason,explore]
     max_running: 2
     priority: 0
     env:
-      CODEX_MODEL: "qwen3.6-plus"
-      CODEX_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      CODEX_MODEL: "gpt-5"
+      CODEX_BASE_URL: "https://api.openai.com/v1"
       OPENAI_API_KEY: "sk-xxx"
 
-  - name: "pi_qwen3.6-plus"
+  - name: "pi_gpt-5"
     type: "pi"
     task_types: [bootstrap,reason,explore]
     max_running: 2
     priority: 0
     env:
-      PI_MODEL: "qwen3.6-plus"
-      PI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      PI_MODEL: "gpt-5"
+      PI_BASE_URL: "https://api.openai.com/v1"
       PI_API_KEY: "sk-xxx"
       PI_PROVIDER_API: "openai-completions"
       PI_MODEL_CONTEXT_WINDOW: "262144"

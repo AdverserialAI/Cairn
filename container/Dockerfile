@@ -61,8 +61,7 @@ RUN cd /tmp && \
     sudo apt clean && \
     sudo rm -rf /var/lib/apt/lists/*
     
-RUN pip3 install tccli awscli --break-system-packages && \
-    sudo bash -c "$(curl -fsSL https://aliyuncli.alicdn.com/install.sh)"
+RUN pip3 install awscli --break-system-packages
 
 RUN sudo npm install -g @openai/codex@0.118.0
 RUN sudo npm install -g @anthropic-ai/claude-code@2.1.98
@@ -78,7 +77,7 @@ RUN sudo rm -rf /usr/lib/llvm-*/build && \
     sudo chmod o+rx /usr/lib/mysql/plugin/auth_pam_tool_dir /etc/ssl/private
 RUN printf '%s\n' 'PS1="${PS1%\\n*} \[\033[0;36m\]\D{%y-%m-%d} - \t\[\033[;32m\]\n${PS1##*\\n}"' >> /home/kali/.bashrc && \
     mkdir -p /home/kali/workspace && cd /home/kali/workspace && git init
-ENV TZ=Asia/Shanghai
+ENV TZ=UTC
 ENV PLAYWRIGHT_MCP_BROWSER=chromium
 ENV CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 ENV PYTHONUNBUFFERED=1
