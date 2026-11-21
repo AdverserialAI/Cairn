@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { ConfigProvider } from "antd";
+import enUS from "antd/locale/en_US";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
@@ -7,7 +8,7 @@ import AuthGuard from "./components/AuthGuard";
 
 export default function App() {
   return (
-    <ConfigProvider>
+    <ConfigProvider locale={enUS}>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
