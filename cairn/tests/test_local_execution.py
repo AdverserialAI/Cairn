@@ -395,7 +395,7 @@ def test_explore_runs_real_local_cli_end_to_end(tmp_path: Path, monkeypatch) -> 
         tmp_path,
         monkeypatch,
         "claude",
-        "echo '{\"accepted\":true,\"data\":{\"description\":\"local fake fact\"}}'",
+        'echo \'{"accepted":true,"data":{"description":"local fake fact"}}\'',
     )
     monkeypatch.setattr(common, "GRAPH_SNAPSHOT_ROOT", str(tmp_path / "prompts"))
 
@@ -428,7 +428,7 @@ def test_explore_local_cli_rejection_releases_intent(tmp_path: Path, monkeypatch
         tmp_path,
         monkeypatch,
         "claude",
-        "echo '{\"accepted\":false,\"reason\":\"policy_refusal\"}'",
+        'echo \'{"accepted":false,"reason":"policy_refusal"}\'',
     )
     monkeypatch.setattr(common, "GRAPH_SNAPSHOT_ROOT", str(tmp_path / "prompts"))
 
@@ -452,3 +452,115 @@ def test_explore_local_cli_rejection_releases_intent(tmp_path: Path, monkeypatch
     assert outcome == "rejected"
     assert client.concluded == []
     assert client.released == [("proj_001", "i001", "test-worker")]
+
+
+# A deployment that connects the model outside Cairn runs workers locally too, but there the
+# worker carries the model settings and the CLI has no login of its own to fall back on.
+
+
+def test_pi_local_driver_uses_the_connected_model_when_the_worker_carries_one() -> None:
+    worker = WorkerConfig.model_validate(
+        {
+            "name": "pi-primary",
+            "type": "pi",
+            "task_types": ["explore"],
+            "max_running": 1,
+            "priority": 0,
+            "env": {
+                "PI_MODEL": "adverserial/cyberseek",
+                "PI_BASE_URL": "http://model-proxy:8089/v1",
+                "PI_API_KEY": "local-capability-0123456789",
+                "PI_PROVIDER_API": "openai-completions",
+            },
+        }
+    )
+    driver = PiDriver(local=True)
+    for argv in (driver.build_execute(worker, "PROMPT", None).argv, driver.build_conclude(worker, "PROMPT", "sess")):
+        assert argv[:2] == ["/bin/sh", "-lc"] and "models.json" in argv[2]
+        models = argv[5]
+        assert '"baseUrl":"http://model-proxy:8089/v1"' in models and '"api":"openai-completions"' in models
+        assert '"apiKey":"local-capability-0123456789"' in models and '"id":"adverserial/cyberseek"' in models
+        assert argv[argv.index("--provider") + 1] == "cairn"
+        assert argv[argv.index("--model") + 1] == "adverserial/cyberseek"
+
+
+def test_codex_local_driver_uses_the_connected_model_when_the_worker_carries_one() -> None:
+    worker = WorkerConfig.model_validate(
+        {
+            "name": "codex-primary",
+            "type": "codex",
+            "task_types": ["explore"],
+            "max_running": 1,
+            "priority": 0,
+            "env": {
+                "CODEX_MODEL": "gpt-x",
+                "CODEX_BASE_URL": "http://model-proxy:8089/v1",
+                "OPENAI_API_KEY": "local-capability-0123456789",
+            },
+        }
+    )
+    driver = CodexDriver(local=True)
+    for argv in (driver.build_execute(worker, "PROMPT", None).argv, driver.build_conclude(worker, "PROMPT", "sess")):
+        assert argv[argv.index("--model") + 1] == "gpt-x"
+        assert 'model_providers.cairn.base_url="http://model-proxy:8089/v1"' in argv
+        assert 'model_providers.cairn.env_key="OPENAI_API_KEY"' in argv
+        assert "local-capability-0123456789" not in " ".join(argv)  # codex reads the token from its environment
+
+
+@pytest.mark.parametrize("missing", ["PI_MODEL", "PI_BASE_URL", "PI_API_KEY", "PI_PROVIDER_API"])
+def test_pi_local_driver_stays_native_unless_every_model_setting_is_present(missing: str) -> None:
+    env = {
+        "PI_MODEL": "m",
+        "PI_BASE_URL": "http://model-proxy:8089/v1",
+        "PI_API_KEY": "local-capability-0123456789",
+        "PI_PROVIDER_API": "openai-completions",
+    }
+    env.pop(missing)
+    worker = WorkerConfig.model_validate(
+        {"name": "pi", "type": "pi", "task_types": ["explore"], "max_running": 1, "priority": 0, "env": env}
+    )
+    argv = PiDriver(local=True).build_execute(worker, "PROMPT", None).argv
+    assert "--provider" not in argv and "models.json" not in " ".join(argv)
+
+
+def test_hosted_deployment_runs_pi_against_the_connected_model(tmp_path: Path, monkeypatch) -> None:
+    """The whole path: the platform's document, the shipped hosted configuration, the local pi driver."""
+    import json
+
+    from cairn.dispatcher import confidential
+
+    root = tmp_path / "runtime"
+    root.mkdir(mode=0o700)
+    token = root / "token"
+    token.write_text("local-capability-0123456789abcdef\n")
+    token.chmod(0o600)
+    document = root / "bootstrap.json"
+    document.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "providers": [
+                    {
+                        "provider": "openai",
+                        "model": "adverserial/cyberseek",
+                        "transport": "agent-proxy",
+                        "base_url": "http://model-proxy:8089/v1",
+                        "api_key_file": str(token),
+                    }
+                ],
+            }
+        )
+    )
+    document.chmod(0o600)
+    monkeypatch.setattr(confidential, "RUNTIME_SECRET_ROOT", root)
+    monkeypatch.setenv(confidential.BOOTSTRAP_ENV, str(document))
+    monkeypatch.setenv(confidential.LOCAL_WORKERS_ENV, "1")
+
+    config = DispatchConfig.load(REPO_ROOT / "hosted" / "dispatch.hosted.yaml")
+    worker = config.workers[0]
+    driver = get_driver(worker.type, config.runtime.execution)
+    argv = driver.build_execute(worker, "PROMPT", None).argv
+
+    assert config.runtime.execution == "local" and worker.name == "pi-primary"
+    assert argv[argv.index("--provider") + 1] == "cairn" and argv[argv.index("--model") + 1] == "adverserial/cyberseek"
+    assert '"apiKey":"local-capability-0123456789abcdef"' in argv[5]

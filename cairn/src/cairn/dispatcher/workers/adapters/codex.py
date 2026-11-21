@@ -5,6 +5,9 @@ from cairn.dispatcher.workers.base import DriverResult, RegexSessionDriver
 from cairn.dispatcher.workers.health import HealthResult, http_ping, proxies_from_env
 
 
+_MODEL_KEYS = ("CODEX_MODEL", "CODEX_BASE_URL", "OPENAI_API_KEY")
+
+
 class CodexDriver(RegexSessionDriver):
     type_name = "codex"
 
@@ -13,6 +16,16 @@ class CodexDriver(RegexSessionDriver):
 
     def local_binary(self) -> str | None:
         return "codex"
+
+    def _native(self, worker: WorkerConfig) -> bool:
+        """Whether to run codex with the host's own configuration.
+
+        That is what local execution means on a developer's machine, where codex is already
+        logged in. A deployment that connects the model outside Cairn also runs workers
+        locally, but there the worker carries the model settings, and codex has no
+        configuration of its own to fall back on: it must be given them.
+        """
+        return self.local and not all(worker.env.get(key) for key in _MODEL_KEYS)
 
     def check_health(self, worker: WorkerConfig, *, timeout: float) -> HealthResult:
         env = worker.env
@@ -35,7 +48,7 @@ class CodexDriver(RegexSessionDriver):
         return f"POST {worker.env['CODEX_BASE_URL']}/responses (model={worker.env['CODEX_MODEL']})"
 
     def build_execute(self, worker: WorkerConfig, prompt: str, session: str | None) -> DriverResult:
-        if self.local:
+        if self._native(worker):
             return DriverResult(
                 argv=[
                     "codex",
@@ -71,7 +84,7 @@ class CodexDriver(RegexSessionDriver):
         )
 
     def build_conclude(self, worker: WorkerConfig, prompt: str, session: str) -> list[str]:
-        if self.local:
+        if self._native(worker):
             return [
                 "codex",
                 "exec",

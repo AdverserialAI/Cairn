@@ -9,6 +9,9 @@ from cairn.dispatcher.workers.base import DriverResult, WorkerDriver
 from cairn.dispatcher.workers.health import HealthResult, http_ping, proxies_from_env
 
 
+_MODEL_KEYS = ("PI_MODEL", "PI_BASE_URL", "PI_API_KEY", "PI_PROVIDER_API")
+
+
 class PiDriver(WorkerDriver):
     type_name = "pi"
 
@@ -17,6 +20,16 @@ class PiDriver(WorkerDriver):
 
     def local_binary(self) -> str | None:
         return "pi"
+
+    def _native(self, worker: WorkerConfig) -> bool:
+        """Whether to run pi with the host's own configuration.
+
+        That is what local execution means on a developer's machine, where pi is already
+        logged in. A deployment that connects the model outside Cairn also runs workers
+        locally, but there the worker carries the model settings, and pi has no
+        configuration of its own to fall back on: it must be given them.
+        """
+        return self.local and not all(worker.env.get(key) for key in _MODEL_KEYS)
 
     def check_health(self, worker: WorkerConfig, *, timeout: float) -> HealthResult:
         env = worker.env
@@ -55,7 +68,7 @@ class PiDriver(WorkerDriver):
         return f"POST {env['PI_BASE_URL']} (api={env['PI_PROVIDER_API']}, model={env['PI_MODEL']})"
 
     def build_execute(self, worker: WorkerConfig, prompt: str, session: str | None) -> DriverResult:
-        if self.local:
+        if self._native(worker):
             return DriverResult(argv=self._local_argv(worker, prompt, session), session=session)
         env = worker.env
         argv = [
@@ -74,7 +87,7 @@ class PiDriver(WorkerDriver):
         return DriverResult(argv=self._wrap_with_models(worker, argv), session=session)
 
     def build_conclude(self, worker: WorkerConfig, prompt: str, session: str) -> list[str]:
-        if self.local:
+        if self._native(worker):
             return self._local_argv(worker, prompt, session)
         env = worker.env
         argv = [
