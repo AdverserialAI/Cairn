@@ -1,0 +1,54 @@
+# Dispatcher configuration for a hosted, single-owner deployment.
+#
+# No model settings appear here. The owner connects a model outside Cairn, and the
+# deployment hands Cairn a local address and a local token for it (see
+# docs/CONFIDENTIAL-MODEL-ACCESS.md). One worker is listed per kind Cairn can run; only
+# the kinds that can speak the connected model are started.
+server: "http://cairn-server:8000"
+
+runtime:
+  interval: 3
+  max_workers: 4
+  max_running_projects: 2
+  max_project_workers: 2
+  healthcheck_timeout: 30
+  worker_healthcheck: "startup_only"
+  execution: "local"
+  prompt_group: "default"
+
+tasks:
+  bootstrap:
+    timeout: 300
+    conclude_timeout: 90
+  reason:
+    timeout: 300
+    max_intents: 2
+  explore:
+    timeout: 300
+    conclude_timeout: 90
+
+local:
+  workspace_root: "/cairn-data/work"
+  completed_action: "keep"
+
+workers:
+  - name: "claude-primary"
+    type: "claudecode"
+    task_types: [bootstrap, reason, explore]
+    max_running: 2
+    priority: 0
+    env: {}
+
+  - name: "codex-primary"
+    type: "codex"
+    task_types: [bootstrap, reason, explore]
+    max_running: 2
+    priority: 1
+    env: {}
+
+  - name: "pi-primary"
+    type: "pi"
+    task_types: [bootstrap, reason, explore]
+    max_running: 2
+    priority: 2
+    env: {}

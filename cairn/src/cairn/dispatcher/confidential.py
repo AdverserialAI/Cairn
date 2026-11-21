@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -9,6 +10,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 BOOTSTRAP_ENV = "CAIRN_LLM_BOOTSTRAP_FILE"
+LOCAL_WORKERS_ENV = "CAIRN_MANAGED_LOCAL_WORKERS"
 RUNTIME_SECRET_ROOT = Path("/run/adverserial/current")
 MODEL_PROXY_ORIGIN = "http://model-proxy:8089"
 
@@ -29,6 +31,10 @@ _MANAGED_ENV_KEYS = frozenset(
     }
 )
 _PROVIDER_APIS = frozenset({"anthropic-messages", "openai-responses", "openai-completions"})
+# The hosting platform's own document names providers, not workers. Each provider's wire
+# format decides which kind of worker can speak it.
+_PROVIDER_WORKER_TYPES = {"anthropic": "claudecode", "openai-responses": "codex", "openai": "pi"}
+_MAX_PROVIDERS = 2
 
 
 class ConfidentialBootstrapError(ValueError):
@@ -44,10 +50,17 @@ def apply_confidential_bootstrap(data: Any) -> Any:
     if not isinstance(data, dict):
         raise ConfidentialBootstrapError("dispatch configuration must be an object")
     runtime = data.get("runtime")
-    if not isinstance(runtime, dict) or runtime.get("execution", "container") != "container":
-        raise ConfidentialBootstrapError("confidential LLM bootstrap requires runtime.execution=container")
+    execution = runtime.get("execution", "container") if isinstance(runtime, dict) else None
+    # Local workers share the dispatcher's own container. That is only sound where the
+    # deployment gives Cairn a container of its own for that purpose and says so.
+    if execution != "container" and not (execution == "local" and os.environ.get(LOCAL_WORKERS_ENV) == "1"):
+        raise ConfidentialBootstrapError(
+            f"confidential LLM bootstrap requires runtime.execution=container (or local with {LOCAL_WORKERS_ENV}=1)"
+        )
 
     document = _read_json_secret(Path(bootstrap_path), _MAX_BOOTSTRAP_BYTES)
+    if "providers" in document:
+        return _apply_platform_providers(data, document)
     _require_exact_keys(document, {"version", "workers"}, "bootstrap")
     if document["version"] != 1:
         raise ConfidentialBootstrapError("bootstrap.version must be 1")
@@ -162,6 +175,141 @@ def apply_confidential_bootstrap(data: Any) -> Any:
     if missing_names:
         raise ConfidentialBootstrapError("bootstrap is missing workers: " + ", ".join(sorted(missing_names)))
     return result
+
+
+def _platform_providers(document: dict[str, Any]) -> list[dict[str, str]]:
+    """Validate the hosting platform's document and return its providers with their tokens."""
+
+    _require_exact_keys(document, {"version", "providers"}, "bootstrap")
+    if document["version"] != 1:
+        raise ConfidentialBootstrapError("bootstrap.version must be 1")
+    entries = document["providers"]
+    if not isinstance(entries, list) or len(entries) > _MAX_PROVIDERS:
+        raise ConfidentialBootstrapError(f"bootstrap.providers must be an array of at most {_MAX_PROVIDERS}")
+    providers: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(entries):
+        context = f"bootstrap.providers[{index}]"
+        if not isinstance(entry, dict):
+            raise ConfidentialBootstrapError(f"{context} must be an object")
+        _require_exact_keys(entry, {"provider", "model", "transport", "base_url", "api_key_file"}, context)
+        provider = entry["provider"]
+        if provider not in _PROVIDER_WORKER_TYPES:
+            raise ConfidentialBootstrapError(f"{context}.provider is not supported")
+        if provider in seen:
+            raise ConfidentialBootstrapError(f"duplicate bootstrap provider: {provider}")
+        seen.add(provider)
+        if entry["transport"] != "agent-proxy":
+            raise ConfidentialBootstrapError(f"{context}.transport must be agent-proxy")
+        providers.append(
+            {
+                "provider": provider,
+                "model": _clean_text(entry["model"], f"{context}.model", 256),
+                "base_url": _validate_proxy_url(entry["base_url"], f"{context}.base_url"),
+                "token": _read_token(Path(_clean_text(entry["api_key_file"], f"{context}.api_key_file", 1024))),
+            }
+        )
+    return providers
+
+
+def _apply_platform_providers(data: dict[str, Any], document: dict[str, Any]) -> dict[str, Any]:
+    """Give each connected provider to the workers that speak its wire format.
+
+    The dispatch configuration lists one worker per kind it can run. A worker whose kind
+    has no connected provider is left out, so the owner's choice of model decides which
+    workers exist. Provider keys never reach Cairn: each worker gets the local proxy
+    address and a local token.
+    """
+
+    providers = {entry["provider"]: entry for entry in _platform_providers(document)}
+    by_worker_type = {_PROVIDER_WORKER_TYPES[name]: entry for name, entry in providers.items()}
+    result = deepcopy(data)
+    common_env = result.get("common_env") or {}
+    if not isinstance(common_env, dict):
+        raise ConfidentialBootstrapError("common_env must be an object")
+    result["common_env"] = {key: value for key, value in common_env.items() if key not in _MANAGED_ENV_KEYS}
+    configured = result.get("workers")
+    if not isinstance(configured, list):
+        raise ConfidentialBootstrapError("dispatch workers must be an array")
+    kept: list[dict[str, Any]] = []
+    for worker in configured:
+        if not isinstance(worker, dict):
+            raise ConfidentialBootstrapError("every dispatch worker must be an object")
+        worker_type = worker.get("type")
+        if worker_type == "mock":
+            kept.append(worker)
+            continue
+        entry = by_worker_type.get(worker_type) if isinstance(worker_type, str) else None
+        if entry is None:
+            continue
+        env = worker.get("env") or {}
+        if not isinstance(env, dict):
+            raise ConfidentialBootstrapError(f"worker {worker.get('name')} env must be an object")
+        clean_env = {key: value for key, value in env.items() if key not in _MANAGED_ENV_KEYS}
+        if worker_type == "claudecode":
+            clean_env.update(
+                {
+                    "ANTHROPIC_MODEL": entry["model"],
+                    "ANTHROPIC_BASE_URL": entry["base_url"],
+                    "ANTHROPIC_AUTH_TOKEN": entry["token"],
+                }
+            )
+        elif worker_type == "codex":
+            clean_env.update(
+                {"CODEX_MODEL": entry["model"], "CODEX_BASE_URL": entry["base_url"], "OPENAI_API_KEY": entry["token"]}
+            )
+        else:
+            clean_env.update(
+                {
+                    "PI_MODEL": entry["model"],
+                    "PI_BASE_URL": entry["base_url"],
+                    "PI_API_KEY": entry["token"],
+                    "PI_PROVIDER_API": "openai-completions",
+                }
+            )
+        worker["env"] = clean_env
+        kept.append(worker)
+    result["workers"] = kept
+    return result
+
+
+def managed() -> bool:
+    """Whether the model is connected outside Cairn, by the deployment's owner."""
+
+    return bool(os.environ.get(BOOTSTRAP_ENV, "").strip())
+
+
+def connected_models() -> list[dict[str, str]] | None:
+    """The connected models, without tokens. None when the document is not the platform's.
+
+    An empty list means the owner has not connected a model yet: nothing can run, and
+    that is a normal state to wait in, not an error.
+    """
+
+    document = _read_json_secret(Path(os.environ.get(BOOTSTRAP_ENV, "").strip()), _MAX_BOOTSTRAP_BYTES)
+    if "providers" not in document:
+        return None
+    return [{"provider": entry["provider"], "model": entry["model"]} for entry in _platform_providers(document)]
+
+
+def bootstrap_fingerprint() -> str:
+    """Changes whenever the owner connects, replaces or removes a model."""
+
+    digest = hashlib.sha256()
+    path = Path(os.environ.get(BOOTSTRAP_ENV, "").strip())
+    try:
+        raw = _read_secret(path, _MAX_BOOTSTRAP_BYTES)
+        digest.update(raw.encode())
+        document = json.loads(raw)
+        entries = document.get("providers") or document.get("workers") or []
+        for entry in entries if isinstance(entries, list) else []:
+            if isinstance(entry, dict):
+                name = entry.get("api_key_file") or entry.get("token_file")
+                if isinstance(name, str):
+                    digest.update(b"\0" + _read_secret(Path(name), _MAX_TOKEN_BYTES).encode())
+    except (ConfidentialBootstrapError, ValueError, AttributeError) as exc:
+        digest.update(b"unreadable:" + str(exc).encode())
+    return digest.hexdigest()
 
 
 def _read_json_secret(path: Path, max_bytes: int) -> dict[str, Any]:

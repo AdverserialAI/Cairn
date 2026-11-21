@@ -1,0 +1,29 @@
+#!/bin/sh
+# Starts one part of a hosted Cairn: "server" or "dispatcher".
+set -eu
+
+DATA=${CAIRN_DATA_DIR:-/cairn-data}
+export HOME="$DATA/home"
+mkdir -p "$HOME" "$DATA/work"
+
+# The toolbox keeps its reference material in the image. Make it visible from Cairn's own
+# home directory, which lives on the deployment's data volume.
+for item in .config/nuclei .local/nuclei-templates knowledges pocs tools; do
+  if [ -e "/home/kali/$item" ] && [ ! -e "$HOME/$item" ]; then
+    mkdir -p "$(dirname "$HOME/$item")"
+    ln -s "/home/kali/$item" "$HOME/$item"
+  fi
+done
+
+case "${1:-}" in
+  server)
+    exec /cairn/.venv/bin/cairn serve --host 0.0.0.0 --port 8000 --db-path "$DATA/cairn.db" --no-access-log
+    ;;
+  dispatcher)
+    exec /cairn/.venv/bin/cairn dispatch --config "${CAIRN_DISPATCH_CONFIG:-/cairn/dispatch.hosted.yaml}"
+    ;;
+  *)
+    echo "usage: cairn-hosted server|dispatcher" >&2
+    exit 64
+    ;;
+esac

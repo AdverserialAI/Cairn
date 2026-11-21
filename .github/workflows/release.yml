@@ -18,6 +18,12 @@ concurrency:
 env:
   APP_IMAGE: us-central1-docker.pkg.dev/adverserial-ack-poc/agents/cairn
   WORKER_IMAGE: us-central1-docker.pkg.dev/adverserial-ack-poc/agents/cairn-worker
+  # The worker toolbox with Cairn installed in it, for hosted single-owner deployments
+  # that do not give Cairn the machine's Docker socket (Dockerfile.hosted).
+  HOSTED_IMAGE: us-central1-docker.pkg.dev/adverserial-ack-poc/agents/cairn-hosted
+  # The public evidence verifier the hosted image's attestation page uses by default.
+  # An owner can enter another verifier on the page.
+  VERIFIER_URL: https://attest.adverserial.ai/verify
   WORKLOAD_IDENTITY_PROVIDER: projects/711745269151/locations/global/workloadIdentityPools/github-releases/providers/cairn
   PUBLISHER: artex-release-publisher@adverserial-ack-poc.iam.gserviceaccount.com
 
@@ -103,23 +109,66 @@ jobs:
             ${{ env.WORKER_IMAGE }}:${{ github.ref_name }}
             ${{ env.WORKER_IMAGE }}:git-${{ github.sha }}
 
+      # The worker build can outlast the first sign-in, so sign in again before the next push.
+      - name: Sign in to Google Cloud again
+        id: google-again
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.PUBLISHER }}
+          token_format: access_token
+          access_token_lifetime: 1800s
+
+      - name: Sign in to Artifact Registry again
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: us-central1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.google-again.outputs.access_token }}
+
+      - name: Build and push the hosted Cairn image
+        id: hosted
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: Dockerfile.hosted
+          platforms: linux/amd64
+          push: true
+          # Built on the worker image just pushed, by digest, so its size limits apply here too.
+          sbom: false
+          provenance: mode=max
+          build-args: |
+            WORKER_IMAGE=${{ env.WORKER_IMAGE }}@${{ steps.worker.outputs.digest }}
+            VERIFIER_URL=${{ env.VERIFIER_URL }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+          tags: |
+            ${{ env.HOSTED_IMAGE }}:${{ github.ref_name }}
+            ${{ env.HOSTED_IMAGE }}:git-${{ github.sha }}
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
 
-      - name: Sign both images by digest
+      - name: Sign the images by digest
         env:
           APP_DIGEST: ${{ steps.app.outputs.digest }}
           WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
+          HOSTED_DIGEST: ${{ steps.hosted.outputs.digest }}
         run: |
           [[ "$APP_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           [[ "$WORKER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$HOSTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           cosign sign --yes "$APP_IMAGE@$APP_DIGEST"
           cosign sign --yes "$WORKER_IMAGE@$WORKER_DIGEST"
+          cosign sign --yes "$HOSTED_IMAGE@$HOSTED_DIGEST"
 
       - name: Create confidential-runtime release files
         env:
           APP_DIGEST: ${{ steps.app.outputs.digest }}
           WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
+          HOSTED_DIGEST: ${{ steps.hosted.outputs.digest }}
         run: |
           python3 - <<'PY'
           import json
@@ -128,7 +177,8 @@ jobs:
 
           app = f'{os.environ["APP_IMAGE"]}@{os.environ["APP_DIGEST"]}'
           worker = f'{os.environ["WORKER_IMAGE"]}@{os.environ["WORKER_DIGEST"]}'
-          for image in (app, worker):
+          hosted = f'{os.environ["HOSTED_IMAGE"]}@{os.environ["HOSTED_DIGEST"]}'
+          for image in (app, worker, hosted):
               if "@sha256:" not in image or len(image.rsplit("@sha256:", 1)[1]) != 64:
                   raise SystemExit("invalid release digest")
           identity = f'https://github.com/{os.environ["GITHUB_REPOSITORY"]}/.github/workflows/release.yml@{os.environ["GITHUB_REF"]}'
@@ -138,15 +188,16 @@ jobs:
               "version": os.environ["GITHUB_REF_NAME"],
               "commit": os.environ["GITHUB_SHA"],
               "platform": "linux/amd64",
-              "images": {"application": app, "worker": worker},
+              "images": {"application": app, "worker": worker, "hosted": hosted},
               "attestation": {
+                  "verifier_url": os.environ["VERIFIER_URL"],
                   "cosign_oidc_issuer": "https://token.actions.githubusercontent.com",
                   "cosign_certificate_identity": identity,
-                  "measurement_input": "both image digests",
+                  "measurement_input": "the hosted image digest for a hosted deployment; otherwise both the application and worker digests",
               },
           }
           Path("cairn-release.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-          Path("cairn-images.env").write_text(f"CAIRN_IMAGE={app}\nCAIRN_WORKER_IMAGE={worker}\n")
+          Path("cairn-images.env").write_text(f"CAIRN_IMAGE={app}\nCAIRN_WORKER_IMAGE={worker}\nCAIRN_HOSTED_IMAGE={hosted}\n")
           PY
           sha256sum cairn-release.json cairn-images.env > SHA256SUMS
 
@@ -155,6 +206,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           APP_DIGEST: ${{ steps.app.outputs.digest }}
           WORKER_DIGEST: ${{ steps.worker.outputs.digest }}
+          HOSTED_DIGEST: ${{ steps.hosted.outputs.digest }}
         run: |
           cat > notes.md <<NOTES
           ## Confidential VM image pins
@@ -163,6 +215,7 @@ jobs:
           | --- | --- |
           | Cairn application | \`$APP_IMAGE@$APP_DIGEST\` |
           | Cairn worker | \`$WORKER_IMAGE@$WORKER_DIGEST\` |
+          | Cairn hosted (worker toolbox with Cairn, for single-owner deployments) | \`$HOSTED_IMAGE@$HOSTED_DIGEST\` |
 
           Commit: \`$GITHUB_SHA\`
 
@@ -178,6 +231,10 @@ jobs:
             --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
 
           cosign verify "$WORKER_IMAGE@$WORKER_DIGEST" \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
+            --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
+
+          cosign verify "$HOSTED_IMAGE@$HOSTED_DIGEST" \\
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
             --certificate-identity "https://github.com/$GITHUB_REPOSITORY/.github/workflows/release.yml@$GITHUB_REF"
           \`\`\`
