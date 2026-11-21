@@ -274,6 +274,9 @@
       <button @click="showLocalPrefs = true" class="h-7 max-w-40 px-2.5 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition inline-flex items-center shrink-0">
         <span class="truncate block" x-text="actorName()"></span>
       </button>
+      <button @click="openAttestation()" title="Attestation" aria-label="Attestation" class="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition inline-flex items-center justify-center shrink-0">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>
+      </button>
       <button @click="loadSettings(); showSettings = true" class="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition inline-flex items-center justify-center shrink-0">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7 7 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a7 7 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a7 7 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a7 7 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path d="M15 12a3 3 0 1 1-6 0-3 3 0 0 1 6 0Z"/></svg>
       </button>
@@ -475,6 +478,9 @@
     <div class="flex items-center gap-1.5 ml-1">
       <button @click="showLocalPrefs = true" class="h-7 max-w-40 px-2.5 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition inline-flex items-center shrink-0">
         <span class="truncate block" x-text="actorName()"></span>
+      </button>
+      <button @click="openAttestation()" title="Attestation" aria-label="Attestation" class="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition inline-flex items-center justify-center shrink-0">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>
       </button>
       <button @click="loadSettings(); showSettings = true" class="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition inline-flex items-center justify-center shrink-0">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7 7 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a7 7 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a7 7 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a7 7 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path d="M15 12a3 3 0 1 1-6 0-3 3 0 0 1 6 0Z"/></svg>
@@ -998,10 +1004,60 @@
       <input type="number" x-model.number="settingsForm.reason_timeout" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
       <p class="text-[11px] text-slate-400 mt-2">Shared backend configuration.</p>
     </div>
+    <div class="mt-4" x-show="modelState.managed" x-cloak>
+      <label class="text-[11px] text-slate-400 mb-1 block font-medium">Model</label>
+      <template x-if="modelState.ready">
+        <div class="text-sm text-slate-700">
+          <template x-for="m in modelState.models" :key="m.provider"><div><span class="font-medium" x-text="m.model"></span> <span class="text-[11px] text-slate-400" x-text="'(' + m.provider + ')'"></span></div></template>
+          <p class="text-[11px] text-slate-400 mt-1">Model access is managed outside Cairn. Change it from the Connect model page of your deployment.</p>
+        </div>
+      </template>
+      <template x-if="!modelState.ready">
+        <p class="text-sm text-amber-700">No model is connected yet, so nothing can run. Connect one from the Connect model page of your deployment.</p>
+      </template>
+    </div>
     <div class="flex justify-end gap-2 mt-5">
       <button @click="showSettings = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Close</button>
       <button @click="saveServerSettings()" class="px-4 py-2 text-sm bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition shadow-sm shadow-brand-200">Save Server</button>
     </div>
+  </div>
+</div>
+
+<!-- Attestation -->
+<div x-show="showAttestation" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showAttestation = false">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 p-6 border border-slate-200/60 max-h-[90vh] overflow-y-auto" @click.stop>
+    <h3 class="text-base font-semibold text-slate-700">Attestation</h3>
+    <p class="text-xs text-slate-500 mt-1">Check, from your browser, that this workspace runs inside a confidential machine and was started from the published configuration. Your browser picks a fresh value, the machine signs it with its hardware key, and an independent verifier checks the signature.</p>
+    <div class="mt-4">
+      <label class="text-[11px] text-slate-400 mb-1 block font-medium">Verifier</label>
+      <input type="url" x-model="attestation.verifier" placeholder="https://…/verify" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition">
+    </div>
+    <div class="flex items-center gap-2 mt-4">
+      <button @click="verifyAttestation()" :disabled="attestation.loading" class="px-4 py-2 text-sm bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition shadow-sm shadow-brand-200 disabled:opacity-60" x-text="attestation.loading ? 'Checking…' : 'Verify this machine'"></button>
+      <button @click="downloadAttestation()" x-show="attestation.bundle" class="px-4 py-2 text-sm text-slate-600 border border-slate-200 hover:bg-slate-50 rounded-xl transition">Download evidence</button>
+      <button @click="showAttestation = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition ml-auto">Close</button>
+    </div>
+    <p class="text-sm text-red-600 mt-3" x-show="attestation.error" x-text="attestation.error"></p>
+    <p class="text-sm text-amber-700 mt-3" x-show="attestation.warning" x-text="attestation.warning"></p>
+    <div class="mt-4 grid gap-2 sm:grid-cols-3" x-show="attestation.bundle || attestation.loading">
+      <template x-for="check in attestationChecks()" :key="check.label">
+        <div class="border border-slate-200 rounded-xl p-3">
+          <div class="text-[11px] text-slate-400 font-medium" x-text="check.label"></div>
+          <div class="text-sm font-semibold mt-1" :class="check.value === true ? 'text-emerald-600' : (check.value === false ? 'text-red-600' : 'text-slate-500')" x-text="check.value === true ? 'Passed' : (check.value === false ? 'Failed' : (attestation.loading ? 'Checking' : 'Not checked'))"></div>
+        </div>
+      </template>
+    </div>
+    <template x-if="attestation.bundle">
+      <div class="mt-4 text-xs">
+        <div class="font-medium text-slate-600 mb-1">Measurements</div>
+        <template x-for="row in attestationMeasurements()" :key="row[0]">
+          <div class="flex gap-3 py-1 border-b border-slate-100"><span class="w-20 shrink-0 text-slate-400" x-text="row[0]"></span><span class="font-mono break-all text-slate-700" x-text="row[1] || '—'"></span></div>
+        </template>
+        <div class="font-medium text-slate-600 mt-4 mb-1">Images this machine was started with</div>
+        <template x-for="image in attestation.bundle.images" :key="image"><div class="font-mono break-all text-slate-700 py-0.5" x-text="image"></div></template>
+        <details class="mt-4"><summary class="cursor-pointer text-slate-500">Configuration the machine was started from</summary><pre class="mt-2 p-3 bg-slate-50 rounded-xl overflow-auto max-h-72 whitespace-pre-wrap break-all" x-text="attestation.bundle.dockerCompose"></pre></details>
+      </div>
+    </template>
   </div>
 </div>
 
@@ -1096,6 +1152,9 @@ function cairnApp() {
     showRenameModal: false,
     showLocalPrefs: false,
     showSettings: false,
+    showAttestation: false,
+    attestation: { loading: false, error: '', warning: '', verifier: '', bundle: null, hardware: null, nonce: null, compose: null, calculated: '' },
+    modelState: { managed: false, ready: false, models: [] },
     showYamlModal: false,
     exportTab: 'yaml',
     exportProjectId: '',
@@ -1186,6 +1245,88 @@ function cairnApp() {
         throw new Error(detail || `HTTP ${r.status}`);
       }
       return text;
+    },
+
+    async openAttestation() {
+      this.showAttestation = true;
+      if (!this.attestation.verifier) {
+        try { this.attestation.verifier = (await this.api('GET', '/attestation/config')).verifier_url || ''; } catch {}
+      }
+    },
+
+    attestationChecks() {
+      return [
+        { label: 'Hardware signature', value: this.attestation.hardware },
+        { label: 'Fresh for this browser', value: this.attestation.nonce },
+        { label: 'Started from this configuration', value: this.attestation.compose },
+      ];
+    },
+
+    attestationMeasurements() {
+      const b = this.attestation.bundle;
+      if (!b) return [];
+      return [['MRTD', b.tcb.mrtd], ['RTMR0', b.tcb.rtmr0], ['RTMR1', b.tcb.rtmr1], ['RTMR2', b.tcb.rtmr2], ['RTMR3', b.tcb.rtmr3], ['OS image', b.info.os_image_hash]];
+    },
+
+    async verifyAttestation() {
+      const hex = value => (value || '').trim().toLowerCase().replace(/^0x/, '');
+      const state = this.attestation;
+      Object.assign(state, { loading: true, error: '', warning: '', bundle: null, hardware: null, nonce: null, compose: null, calculated: '' });
+      try {
+        const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('');
+        const read = async path => {
+          const r = await fetch(path, { cache: 'no-store' });
+          const data = await r.json();
+          if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${r.status}`);
+          return data;
+        };
+        const [quote, info] = await Promise.all([read('/attestation?reportData=' + nonce), read('/info')]);
+        const tcb = typeof info.tcb_info === 'string' ? JSON.parse(info.tcb_info) : info.tcb_info;
+        const events = typeof quote.event_log === 'string' ? JSON.parse(quote.event_log) : [];
+        const dockerCompose = JSON.parse(tcb.app_compose).docker_compose_file || 'The machine reported no configuration.';
+        const images = Array.from(dockerCompose.matchAll(/^\s*image:\s*["']?([^\s"']+)["']?\s*$/gm), m => m[1]);
+        state.bundle = { nonce, quote, info, tcb, dockerCompose, images };
+        state.nonce = hex(quote.report_data).startsWith(nonce);
+        const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(tcb.app_compose))), b => b.toString(16).padStart(2, '0')).join('');
+        state.calculated = digest;
+        const event = events.find(e => e.event === 'compose-hash');
+        state.compose = !!event && hex(event.event_payload) === digest;
+        try {
+          if (!quote.attestation) throw new Error('this machine returned no evidence a verifier can check');
+          if (!state.verifier.trim()) throw new Error('enter the address of a verifier');
+          const r = await fetch(state.verifier.trim(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attestation: quote.attestation }) });
+          const result = await r.json();
+          if (!r.ok) throw new Error(result.error || `HTTP ${r.status}`);
+          state.hardware = result.is_valid === true;
+          state.nonce = hex(result.details && result.details.report_data).startsWith(nonce);
+          if (result.is_valid !== true) state.warning = result.reason || 'The verifier rejected the evidence.';
+        } catch (e) {
+          state.hardware = null;
+          state.warning = 'Your browser could not complete the outside check: ' + e.message + '. Download the evidence and check it with a verifier of your choice.';
+        }
+      } catch (e) {
+        state.bundle = null;
+        state.error = e.message;
+      } finally {
+        state.loading = false;
+      }
+    },
+
+    downloadAttestation() {
+      const state = this.attestation;
+      if (!state.bundle) return;
+      const evidence = {
+        generated_at: new Date().toISOString(), nonce: state.bundle.nonce, attestation: state.bundle.quote, info: state.bundle.info,
+        browser_checks: { hardware_quote_valid: state.hardware, nonce_matches: state.nonce, compose_hash_matches: state.compose, calculated_compose_hash: state.calculated },
+      };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(evidence, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = 'cairn-attestation-' + Date.now() + '.json'; a.click();
+      URL.revokeObjectURL(url);
+    },
+
+    async loadModelState() {
+      try { this.modelState = await this.api('GET', '/model'); } catch {}
     },
 
     showToast(msg, type = 'info') {
@@ -1577,6 +1718,7 @@ function cairnApp() {
     },
 
     async loadSettings() {
+      this.loadModelState();
       try {
         const s = await this.api('GET', '/settings');
         this.settingsForm.intent_timeout = s.intent_timeout;

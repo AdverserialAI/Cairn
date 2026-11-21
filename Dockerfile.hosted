@@ -1,0 +1,42 @@
+# One image for a hosted, single-owner Cairn: the worker toolbox with Cairn installed in it.
+#
+# In a hosted deployment Cairn is not given the machine's Docker socket, so it cannot start a
+# worker container per project. Its workers run as processes beside the dispatcher instead
+# (runtime.execution: local), which means the dispatcher needs the worker's tools in its own
+# image. The same image also runs the server, so a deployment pins one digest.
+#
+# It runs as an unprivileged user with no way to become root.
+ARG WORKER_IMAGE
+FROM ${WORKER_IMAGE}
+
+USER root
+# The default evidence verifier shown on the attestation page. Part of the image, so it is
+# covered by the image digest a deployment is measured with.
+ARG VERIFIER_URL=""
+ENV CAIRN_VERIFIER_URL=${VERIFIER_URL}
+
+RUN pip3 install --no-cache-dir --break-system-packages uv==0.11.7
+
+COPY ./cairn /cairn
+RUN cd /cairn && uv sync --frozen --no-dev -i https://pypi.org/simple && /cairn/.venv/bin/cairn --help >/dev/null
+
+COPY ./hosted/cairn-hosted /usr/local/bin/cairn-hosted
+COPY ./hosted/dispatch.hosted.yaml /cairn/dispatch.hosted.yaml
+COPY ./hosted/AGENTS.md /opt/cairn/workspace/AGENTS.md
+COPY ./hosted/AGENTS.md /opt/cairn/workspace/CLAUDE.md
+
+# No sudo for anyone, an unprivileged user for Cairn, and the toolbox readable by it.
+RUN sed -i '/NOPASSWD/d' /etc/sudoers && \
+    useradd --uid 65532 --user-group --no-create-home --home-dir /cairn-data/home --shell /bin/bash cairn && \
+    chmod 0755 /usr/local/bin/cairn-hosted /home/kali && \
+    mkdir -p /cairn-data && chown 65532:65532 /cairn-data && \
+    chmod -R a+rX /cairn /opt/cairn
+
+ENV CAIRN_LOCAL_WORKSPACE_TEMPLATE=/opt/cairn/workspace
+ENV CAIRN_MANAGED_LOCAL_WORKERS=1
+ENV PYTHONUNBUFFERED=1
+ENV TZ=UTC
+
+USER 65532:65532
+WORKDIR /cairn
+ENTRYPOINT ["/usr/local/bin/cairn-hosted"]

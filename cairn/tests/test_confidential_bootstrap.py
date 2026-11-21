@@ -8,8 +8,8 @@ import pytest
 import yaml
 
 from cairn.dispatcher import confidential
-from cairn.dispatcher.config import DispatchConfig
 from cairn.dispatcher.confidential import ConfidentialBootstrapError
+from cairn.dispatcher.config import DispatchConfig
 
 
 def _dispatch_payload() -> dict:
@@ -150,9 +150,7 @@ def test_confidential_bootstrap_replaces_provider_credentials_with_local_tokens(
             "transport must be agent-proxy",
         ),
         (
-            lambda document: document["workers"][0].update(
-                {"base_url": "https://api.anthropic.com"}
-            ),
+            lambda document: document["workers"][0].update({"base_url": "https://api.anthropic.com"}),
             "fixed http://model-proxy:8089 origin",
         ),
         (lambda document: document["workers"].pop(), "missing workers: pi"),
@@ -177,9 +175,7 @@ def test_confidential_bootstrap_fails_closed_on_invalid_documents(
         DispatchConfig.load(_write_dispatch(tmp_path))
 
 
-def test_confidential_bootstrap_rejects_broad_permissions(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_confidential_bootstrap_rejects_broad_permissions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bootstrap_path, _ = _write_managed_files(tmp_path, monkeypatch)
     bootstrap_path.chmod(0o644)
 
@@ -187,9 +183,7 @@ def test_confidential_bootstrap_rejects_broad_permissions(
         DispatchConfig.load(_write_dispatch(tmp_path))
 
 
-def test_confidential_bootstrap_rejects_symlinked_token(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_confidential_bootstrap_rejects_symlinked_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _, document = _write_managed_files(tmp_path, monkeypatch)
     target = tmp_path / "runtime" / "target.token"
     target.write_text("local-capability-target-0123456789", encoding="utf-8")
@@ -204,9 +198,7 @@ def test_confidential_bootstrap_rejects_symlinked_token(
         DispatchConfig.load(_write_dispatch(tmp_path))
 
 
-def test_confidential_bootstrap_rejects_local_execution(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_confidential_bootstrap_rejects_local_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _write_managed_files(tmp_path, monkeypatch)
     payload = _dispatch_payload()
     payload["runtime"]["execution"] = "local"
@@ -214,3 +206,138 @@ def test_confidential_bootstrap_rejects_local_execution(
 
     with pytest.raises(ConfidentialBootstrapError, match="requires runtime.execution=container"):
         DispatchConfig.load(_write_dispatch(tmp_path, payload))
+
+
+# ---- the hosting platform's own document: providers, not workers --------------------
+
+
+def _platform_document(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, providers: list[dict]) -> Path:
+    path, _ = _write_managed_files(tmp_path, monkeypatch, document={"version": 1, "providers": providers})
+    return path
+
+
+def _provider(tmp_path: Path, provider: str, model: str, path: str = "") -> dict:
+    return {
+        "provider": provider,
+        "model": model,
+        "transport": "agent-proxy",
+        "base_url": "http://model-proxy:8089" + path,
+        "api_key_file": str(tmp_path / "runtime" / "claude.token"),
+    }
+
+
+@pytest.mark.parametrize(
+    ("provider", "path", "worker", "expected"),
+    [
+        ("anthropic", "", "claude", {"ANTHROPIC_MODEL": "m", "ANTHROPIC_BASE_URL": "http://model-proxy:8089"}),
+        ("openai-responses", "/v1", "codex", {"CODEX_MODEL": "m", "CODEX_BASE_URL": "http://model-proxy:8089/v1"}),
+        (
+            "openai",
+            "/v1",
+            "pi",
+            {"PI_MODEL": "m", "PI_BASE_URL": "http://model-proxy:8089/v1", "PI_PROVIDER_API": "openai-completions"},
+        ),
+    ],
+)
+def test_platform_provider_runs_only_the_worker_that_speaks_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, provider: str, path: str, worker: str, expected: dict
+) -> None:
+    _platform_document(tmp_path, monkeypatch, [_provider(tmp_path, provider, "m", path)])
+
+    config = DispatchConfig.load(_write_dispatch(tmp_path))
+
+    assert [w.name for w in config.workers] == [worker]
+    env = config.workers[0].env
+    for key, value in expected.items():
+        assert env[key] == value
+    serialized = json.dumps(config.model_dump())
+    assert "provider-secret" not in serialized and "must-be-removed" not in serialized
+    assert "local-capability-claude" in serialized  # the local token, never a provider key
+    assert env["SHARED"] == "kept"
+
+
+def test_two_platform_providers_run_two_kinds_of_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _platform_document(
+        tmp_path,
+        monkeypatch,
+        [_provider(tmp_path, "anthropic", "claude-x"), _provider(tmp_path, "openai-responses", "gpt-x", "/v1")],
+    )
+    config = DispatchConfig.load(_write_dispatch(tmp_path))
+    assert sorted(w.name for w in config.workers) == ["claude", "codex"]
+
+
+def test_platform_document_with_no_provider_means_waiting_not_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _platform_document(tmp_path, monkeypatch, [])
+    assert confidential.managed() is True
+    assert confidential.connected_models() == []
+
+
+def test_connected_models_never_include_a_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _platform_document(tmp_path, monkeypatch, [_provider(tmp_path, "openai", "adverserial/cyberseek", "/v1")])
+    assert confidential.connected_models() == [{"provider": "openai", "model": "adverserial/cyberseek"}]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"provider": "gemini"}, "not supported"),
+        ({"transport": "direct"}, "must be agent-proxy"),
+        ({"base_url": "https://api.openai.com/v1"}, "fixed http://model-proxy:8089 origin"),
+        ({"base_url": "http://model-proxy:8089/../x"}, "unsafe path"),
+        ({"api_key_file": "/etc/passwd"}, "must be inside"),
+        ({"extra": "field"}, "unknown fields"),
+    ],
+)
+def test_platform_document_is_validated_strictly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: dict, message: str
+) -> None:
+    _platform_document(tmp_path, monkeypatch, [{**_provider(tmp_path, "openai", "m", "/v1"), **change}])
+    with pytest.raises(ConfidentialBootstrapError, match=message):
+        DispatchConfig.load(_write_dispatch(tmp_path))
+
+
+def test_platform_document_refuses_duplicates_and_more_than_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    one = _provider(tmp_path, "openai", "m", "/v1")
+    path = _platform_document(tmp_path, monkeypatch, [one, one])
+    with pytest.raises(ConfidentialBootstrapError, match="duplicate bootstrap provider"):
+        confidential.connected_models()
+    three = [one, _provider(tmp_path, "anthropic", "m"), _provider(tmp_path, "openai-responses", "m", "/v1")]
+    path.write_text(json.dumps({"version": 1, "providers": three}))
+    with pytest.raises(ConfidentialBootstrapError, match="at most 2"):
+        confidential.connected_models()
+
+
+def test_fingerprint_changes_when_the_model_or_its_token_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _platform_document(tmp_path, monkeypatch, [])
+    idle = confidential.bootstrap_fingerprint()
+    assert idle == confidential.bootstrap_fingerprint()
+    path.write_text(json.dumps({"version": 1, "providers": [_provider(tmp_path, "openai", "a", "/v1")]}))
+    connected = confidential.bootstrap_fingerprint()
+    assert connected != idle
+    path.write_text(json.dumps({"version": 1, "providers": [_provider(tmp_path, "openai", "b", "/v1")]}))
+    assert confidential.bootstrap_fingerprint() != connected
+    another_model = confidential.bootstrap_fingerprint()
+    token = tmp_path / "runtime" / "claude.token"
+    token.write_text("local-capability-rotated-0123456789\n")
+    token.chmod(0o600)
+    assert confidential.bootstrap_fingerprint() != another_model
+
+
+def test_local_workers_need_the_deployment_to_say_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _platform_document(tmp_path, monkeypatch, [_provider(tmp_path, "anthropic", "m")])
+    payload = _dispatch_payload()
+    payload["runtime"]["execution"] = "local"
+    payload["local"] = {"completed_action": "keep"}
+    payload.pop("container")
+    with pytest.raises(ConfidentialBootstrapError, match=r"requires runtime\.execution=container"):
+        DispatchConfig.load(_write_dispatch(tmp_path, payload))
+    monkeypatch.setenv(confidential.LOCAL_WORKERS_ENV, "1")
+    config = DispatchConfig.load(_write_dispatch(tmp_path, payload))
+    assert config.runtime.execution == "local" and [w.name for w in config.workers] == ["claude"]
+    assert config.workers[0].env["ANTHROPIC_AUTH_TOKEN"].startswith("local-capability-")

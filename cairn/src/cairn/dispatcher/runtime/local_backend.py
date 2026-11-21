@@ -9,6 +9,7 @@ from cairn.dispatcher.config import LocalConfig
 from cairn.dispatcher.runtime.local_process import LocalProcess
 
 LOG = logging.getLogger(__name__)
+WORKSPACE_TEMPLATE_ENV = "CAIRN_LOCAL_WORKSPACE_TEMPLATE"
 
 
 class LocalBackend:
@@ -34,9 +35,22 @@ class LocalBackend:
 
     def ensure_running(self, project_id: str) -> str:
         project_dir = self._project_dir(project_id)
-        project_dir.mkdir(parents=True, exist_ok=True)
+        if not project_dir.exists():
+            project_dir.mkdir(parents=True)
+            self._seed(project_dir)
         LOG.debug("local project workdir ready project=%s dir=%s", project_id, project_dir)
         return str(project_dir)
+
+    def _seed(self, project_dir: Path) -> None:
+        """Start a new project's directory from the deployment's template, if it has one.
+
+        Per-project worker containers get their instructions from the worker image. Local
+        workers have no image of their own, so a deployment can name a directory whose
+        contents every new project directory starts with.
+        """
+        template = os.environ.get(WORKSPACE_TEMPLATE_ENV, "").strip()
+        if template and Path(template).is_dir():
+            shutil.copytree(template, project_dir, dirs_exist_ok=True)
 
     def build_exec_process(
         self,

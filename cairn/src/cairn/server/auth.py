@@ -12,6 +12,7 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 
+from cairn.server import hosted
 from cairn.server.db import get_conn
 
 _JWT_ALGORITHM = "HS256"
@@ -83,6 +84,9 @@ def require_auth(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     x_api_key: Annotated[str | None, Header()] = None,
 ) -> TokenUser | None:
+    if hosted.front_door():
+        # The deployment's front door has already signed the owner in (see hosted.py).
+        return None
     if x_api_key and x_api_key in _api_keys:
         return None
     if credentials is not None:
