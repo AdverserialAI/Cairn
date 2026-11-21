@@ -8,7 +8,6 @@ from cairn.dispatcher.config import WorkerConfig
 from cairn.dispatcher.workers.base import DriverResult, WorkerDriver
 from cairn.dispatcher.workers.health import HealthResult, http_ping, proxies_from_env
 
-
 _MODEL_KEYS = ("PI_MODEL", "PI_BASE_URL", "PI_API_KEY", "PI_PROVIDER_API")
 
 

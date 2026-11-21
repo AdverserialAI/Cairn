@@ -4,7 +4,6 @@ from cairn.dispatcher.config import WorkerConfig
 from cairn.dispatcher.workers.base import DriverResult, RegexSessionDriver
 from cairn.dispatcher.workers.health import HealthResult, http_ping, proxies_from_env
 
-
 _MODEL_KEYS = ("CODEX_MODEL", "CODEX_BASE_URL", "OPENAI_API_KEY")
 
 
